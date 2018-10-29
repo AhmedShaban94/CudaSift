@@ -380,9 +380,10 @@ __global__ void ExtractSiftDescriptorsCONST(cudaTextureObject_t texObj, SiftPoin
       }
     }
     __syncthreads();
-    
-    // Normalize twice and suppress peaks first time
-    float sum = buffer[idx]*buffer[idx];
+  
+/*
+    // Normalize twice and suppress peaks first time   
+	float sum = buffer[idx]*buffer[idx];
     for (int i=16;i>0;i/=2)
       sum += ShiftDown(sum, i);
     if ((idx&31)==0)
@@ -406,6 +407,14 @@ __global__ void ExtractSiftDescriptorsCONST(cudaTextureObject_t texObj, SiftPoin
       d_sift[bx].ypos *= subsampling;
       d_sift[bx].scale *= subsampling;
     }
+*/
+	float *desc = d_sift[bx].data;
+	desc[idx] = min(buffer[idx], 255.0f);
+	if (idx == 0) {
+		d_sift[bx].xpos *= subsampling;
+		d_sift[bx].ypos *= subsampling;
+		d_sift[bx].scale *= subsampling;
+	}
     __syncthreads();
   }
 }

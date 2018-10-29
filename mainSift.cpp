@@ -9,7 +9,10 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp> 
+#include <opencv2/xfeatures2d.hpp> 
 #include <filesystem>
+#include <chrono> 
 #include "cudaImage.h"
 #include "cudaSift.h"
 #define PI 3.14159265358979323846
@@ -99,13 +102,17 @@ double ScaleUp(CudaImage &res, CudaImage &src);
 
 int main(int argc, char** argv)
 {
+	auto start = std::chrono::steady_clock::now();
+	InitCuda();
 	std::string imagesPath = "D:\\Dataset\\forward_return_images\\images\\test\\";
 	auto imagesEntries = collectImagesNames(imagesPath);
 	for (const auto& imageEntry : imagesEntries)
 		writeMacfile(imageEntry, imagesPath);
+	auto end = std::chrono::steady_clock::now();
+
+	std::cout << "Duration: " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << " seconds." << '\n';
 	return EXIT_SUCCESS;
 }
-
 void MatchAll(SiftData &siftData1, SiftData &siftData2, float *homography)
 {
 #ifdef MANAGEDMEM
@@ -188,7 +195,7 @@ void PrintMatchData(SiftData &siftData1, SiftData &siftData2, CudaImage &img)
 				std::cout << "error=" << (int)sift1[j].match_error << "  ";
 				std::cout << "orient=" << (int)sift1[j].orientation << "," << (int)sift2[k].orientation << "  ";
 				std::cout << " delta=(" << (int)dx << "," << (int)dy << ")" << std::endl;
-			}
+	}
 #endif
 #if 1
 			int len = (int)(fabs(dx) > fabs(dy) ? fabs(dx) : fabs(dy));
@@ -198,7 +205,7 @@ void PrintMatchData(SiftData &siftData1, SiftData &siftData2, CudaImage &img)
 				h_img[y*w + x] = 255.0f;
 			}
 #endif
-		}
+	}
 		int x = (int)(sift1[j].xpos + 0.5);
 		int y = (int)(sift1[j].ypos + 0.5);
 		int s = std::min(x, std::min(y, std::min(w - x - 2, std::min(h - y - 2, (int)(1.41*sift1[j].scale)))));
@@ -209,7 +216,7 @@ void PrintMatchData(SiftData &siftData1, SiftData &siftData2, CudaImage &img)
 		p -= (w + 1);
 		for (int k = 0; k < s; k++)
 			h_img[p - k] = h_img[p + k] = h_img[p - k * w] = h_img[p + k * w] = 255.0f;
-	}
+}
 	std::cout << std::setprecision(6);
 }
 
@@ -237,7 +244,7 @@ void writeMacfile(const filesystem::directory_entry& imageEntry, const std::stri
 
 	// Initial Cuda images and download images to device
 	std::cout << "Initializing data..." << std::endl;
-	InitCuda();
+	//InitCuda();
 	CudaImage img_gpu;
 	img_gpu.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)img.data);
 	img_gpu.Download();
@@ -263,10 +270,10 @@ void writeMacfile(const filesystem::directory_entry& imageEntry, const std::stri
 
 	for (int i = 0; i < siftData.numPts; ++i)
 	{
-		fprintf(keysFile, "%.2f ", (float)host_data[i].ypos); // y first as in the ReadKeys() in keys2a.cpp read
-		fprintf(keysFile, "%.2f ", (float)host_data[i].xpos);
-		fprintf(keysFile, "%.2f ", (float)host_data[i].scale);
-		fprintf(keysFile, "%.2f\n", (float)(host_data[i].orientation * PI / 180.0));
+		fprintf(keysFile, "%f ", (float)host_data[i].ypos); // y first as in the ReadKeys() in keys2a.cpp read
+		fprintf(keysFile, "%f ", (float)host_data[i].xpos);
+		fprintf(keysFile, "%f ", (float)host_data[i].scale);
+		fprintf(keysFile, "%f\n", (float)(host_data[i].orientation * PI / 180.0));
 
 		int blk = 0;
 		for (int line = 0; line < 7; ++line)
@@ -274,14 +281,14 @@ void writeMacfile(const filesystem::directory_entry& imageEntry, const std::stri
 			if (line < 6)
 			{
 				for (int l = 0; l < 20; ++l)
-					fprintf(keysFile, "%.2f ", (float)host_data[i].data[blk + l]);
+					fprintf(keysFile, "%d ", (int)(host_data[i].data[blk + l]/* * 255*/));
 				blk += 20;
 				fprintf(keysFile, "\n");
 			}
 			else
 			{
 				for (int m = 0; m < 8; ++m)
-					fprintf(keysFile, "%.2f ", (float)host_data[i].data[m + 120]);
+					fprintf(keysFile, "%d ", (int)(host_data[i].data[m + 120]/* * 255*/));
 				fprintf(keysFile, "\n");
 			}
 		}
