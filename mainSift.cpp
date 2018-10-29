@@ -12,87 +12,98 @@
 #include <filesystem>
 #include "cudaImage.h"
 #include "cudaSift.h"
-
+#define PI 3.14159265358979323846
 using namespace std::experimental;
 
 int ImproveHomography(SiftData &data, float *homography, int numLoops, float minScore, float maxAmbiguity, float thresh);
 void PrintMatchData(SiftData &siftData1, SiftData &siftData2, CudaImage &img);
 void MatchAll(SiftData &siftData1, SiftData &siftData2, float *homography);
+void writeMacfile(const filesystem::directory_entry& imageEntry, const std::string& macFilesPath);
+std::vector<filesystem::directory_entry> collectImagesNames(const std::string& imagePath);
 
 double ScaleUp(CudaImage &res, CudaImage &src);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Main program
 ///////////////////////////////////////////////////////////////////////////////
-int main(int argc, char **argv)
+//int main(int argc, char **argv)
+//{
+//	int devNum = 0, imgSet = 0;
+//	if (argc > 1)
+//		devNum = std::atoi(argv[1]);
+//	if (argc > 2)
+//		imgSet = std::atoi(argv[2]);
+//
+//	// Read images using OpenCV
+//	cv::Mat limg, rimg;
+//	if (imgSet) {
+//		cv::imread("data/left.pgm", 0).convertTo(limg, CV_32FC1);
+//		cv::imread("data/righ.pgm", 0).convertTo(rimg, CV_32FC1);
+//	}
+//	else {
+//		cv::imread("data/img1.png", 0).convertTo(limg, CV_32FC1);
+//		cv::imread("data/img2.png", 0).convertTo(rimg, CV_32FC1);
+//	}
+//	//cv::flip(limg, rimg, -1);
+//	unsigned int w = limg.cols;
+//	unsigned int h = limg.rows;
+//	std::cout << "Image size = (" << w << "," << h << ")" << std::endl;
+//
+//	// Initial Cuda images and download images to device
+//	std::cout << "Initializing data..." << std::endl;
+//	InitCuda(devNum);
+//	CudaImage img1, img2;
+//	img1.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)limg.data);
+//	img2.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)rimg.data);
+//	img1.Download();
+//	img2.Download();
+//
+//	// Extract Sift features from images
+//	SiftData siftData1, siftData2;
+//	float initBlur = 1.0f;
+//	float thresh = (imgSet ? 4.5f : 3.0f);
+//	InitSiftData(siftData1, 32768, true, true);
+//	InitSiftData(siftData2, 32768, true, true);
+//
+//	// A bit of benchmarking 
+//	//for (int thresh1=1.00f;thresh1<=4.01f;thresh1+=0.50f) {
+//	float *memoryTmp = AllocSiftTempMemory(w, h, 5, false);
+//	for (int i = 0; i < 1000; i++) {
+//		ExtractSift(siftData1, img1, 5, initBlur, thresh, 0.0f, false, memoryTmp);
+//		ExtractSift(siftData2, img2, 5, initBlur, thresh, 0.0f, false, memoryTmp);
+//	}
+//	FreeSiftTempMemory(memoryTmp);
+//
+//	// Match Sift features and find a homography
+//	for (int i = 0; i < 1; i++)
+//		MatchSiftData(siftData1, siftData2);
+//	float homography[9];
+//	int numMatches;
+//	FindHomography(siftData1, homography, &numMatches, 10000, 0.00f, 0.80f, 5.0);
+//	int numFit = ImproveHomography(siftData1, homography, 5, 0.00f, 0.80f, 3.0);
+//
+//	std::cout << "Number of original features: " << siftData1.numPts << " " << siftData2.numPts << std::endl;
+//	std::cout << "Number of matching features: " << numFit << " " << numMatches << " " << 100.0f*numFit / std::min(siftData1.numPts, siftData2.numPts) << "% " << initBlur << " " << thresh << std::endl;
+//	//}
+//
+//  // Print out and store summary data
+//	PrintMatchData(siftData1, siftData2, img1);
+//	cv::imwrite("data/limg_pts.pgm", limg);
+//
+//	//MatchAll(siftData1, siftData2, homography);
+//
+//	// Free Sift data from device
+//	FreeSiftData(siftData1);
+//	FreeSiftData(siftData2);
+//}
+
+int main(int argc, char** argv)
 {
-	int devNum = 0, imgSet = 0;
-	if (argc > 1)
-		devNum = std::atoi(argv[1]);
-	if (argc > 2)
-		imgSet = std::atoi(argv[2]);
-
-	// Read images using OpenCV
-	cv::Mat limg, rimg;
-	if (imgSet) {
-		cv::imread("data/left.pgm", 0).convertTo(limg, CV_32FC1);
-		cv::imread("data/righ.pgm", 0).convertTo(rimg, CV_32FC1);
-	}
-	else {
-		cv::imread("data/img1.png", 0).convertTo(limg, CV_32FC1);
-		cv::imread("data/img2.png", 0).convertTo(rimg, CV_32FC1);
-	}
-	//cv::flip(limg, rimg, -1);
-	unsigned int w = limg.cols;
-	unsigned int h = limg.rows;
-	std::cout << "Image size = (" << w << "," << h << ")" << std::endl;
-
-	// Initial Cuda images and download images to device
-	std::cout << "Initializing data..." << std::endl;
-	InitCuda(devNum);
-	CudaImage img1, img2;
-	img1.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)limg.data);
-	img2.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)rimg.data);
-	img1.Download();
-	img2.Download();
-
-	// Extract Sift features from images
-	SiftData siftData1, siftData2;
-	float initBlur = 1.0f;
-	float thresh = (imgSet ? 4.5f : 3.0f);
-	InitSiftData(siftData1, 32768, true, true);
-	InitSiftData(siftData2, 32768, true, true);
-
-	// A bit of benchmarking 
-	//for (int thresh1=1.00f;thresh1<=4.01f;thresh1+=0.50f) {
-	float *memoryTmp = AllocSiftTempMemory(w, h, 5, false);
-	for (int i = 0; i < 1000; i++) {
-		ExtractSift(siftData1, img1, 5, initBlur, thresh, 0.0f, false, memoryTmp);
-		ExtractSift(siftData2, img2, 5, initBlur, thresh, 0.0f, false, memoryTmp);
-	}
-	FreeSiftTempMemory(memoryTmp);
-
-	// Match Sift features and find a homography
-	for (int i = 0; i < 1; i++)
-		MatchSiftData(siftData1, siftData2);
-	float homography[9];
-	int numMatches;
-	FindHomography(siftData1, homography, &numMatches, 10000, 0.00f, 0.80f, 5.0);
-	int numFit = ImproveHomography(siftData1, homography, 5, 0.00f, 0.80f, 3.0);
-
-	std::cout << "Number of original features: " << siftData1.numPts << " " << siftData2.numPts << std::endl;
-	std::cout << "Number of matching features: " << numFit << " " << numMatches << " " << 100.0f*numFit / std::min(siftData1.numPts, siftData2.numPts) << "% " << initBlur << " " << thresh << std::endl;
-	//}
-
-  // Print out and store summary data
-	PrintMatchData(siftData1, siftData2, img1);
-	cv::imwrite("data/limg_pts.pgm", limg);
-
-	//MatchAll(siftData1, siftData2, homography);
-
-	// Free Sift data from device
-	FreeSiftData(siftData1);
-	FreeSiftData(siftData2);
+	std::string imagesPath = "D:\\Dataset\\forward_return_images\\images\\test\\";
+	auto imagesEntries = collectImagesNames(imagesPath);
+	for (const auto& imageEntry : imagesEntries)
+		writeMacfile(imageEntry, imagesPath);
+	return EXIT_SUCCESS;
 }
 
 void MatchAll(SiftData &siftData1, SiftData &siftData2, float *homography)
@@ -209,4 +220,73 @@ std::vector<filesystem::directory_entry> collectImagesNames(const std::string& i
 		if (entry.path().extension() == ".jpg")
 			images.push_back(entry);
 	return images;
+}
+
+void writeMacfile(const filesystem::directory_entry& imageEntry, const std::string& macFilesPath)
+{
+	// prepare image properties. 
+	auto imagePath = imageEntry.path().string();
+	auto imageName = imageEntry.path().filename().string();
+	auto macFileName = imageName.erase(imageName.find(".jpg"), 4) + ".mac";
+
+	// read image from disk. 
+	cv::Mat img;
+	cv::imread(imagePath, cv::IMREAD_GRAYSCALE).convertTo(img, CV_32FC1);
+	unsigned int w = img.cols;
+	unsigned int h = img.rows;
+
+	// Initial Cuda images and download images to device
+	std::cout << "Initializing data..." << std::endl;
+	InitCuda();
+	CudaImage img_gpu;
+	img_gpu.Allocate(w, h, iAlignUp(w, 128), false, NULL, (float*)img.data);
+	img_gpu.Download();
+
+	// Extract Sift features from images
+	SiftData siftData;
+	float initBlur = 1.0f, imgSet = 0.0;
+	float thresh = (imgSet ? 4.5f : 3.0f);
+	InitSiftData(siftData, 32768, true, true);
+	float *memoryTmp = AllocSiftTempMemory(w, h, 5, false);
+	ExtractSift(siftData, img_gpu, 5, initBlur, thresh, 0.0f, false, memoryTmp);
+
+	// write features to mac file. 
+	char buf[2048];
+	FILE* keysFile;
+	unsigned int descSize = 128;
+	auto host_data = siftData.h_data;
+
+	sprintf(buf, (macFilesPath + macFileName).c_str());
+	keysFile = fopen(buf, "w");
+	fprintf(keysFile, "%d ", siftData.numPts);
+	fprintf(keysFile, "%d\n", descSize);
+
+	for (int i = 0; i < siftData.numPts; ++i)
+	{
+		fprintf(keysFile, "%.2f ", (float)host_data[i].ypos); // y first as in the ReadKeys() in keys2a.cpp read
+		fprintf(keysFile, "%.2f ", (float)host_data[i].xpos);
+		fprintf(keysFile, "%.2f ", (float)host_data[i].scale);
+		fprintf(keysFile, "%.2f\n", (float)(host_data[i].orientation * PI / 180.0));
+
+		int blk = 0;
+		for (int line = 0; line < 7; ++line)
+		{
+			if (line < 6)
+			{
+				for (int l = 0; l < 20; ++l)
+					fprintf(keysFile, "%.2f ", (float)host_data[i].data[blk + l]);
+				blk += 20;
+				fprintf(keysFile, "\n");
+			}
+			else
+			{
+				for (int m = 0; m < 8; ++m)
+					fprintf(keysFile, "%.2f ", (float)host_data[i].data[m + 120]);
+				fprintf(keysFile, "\n");
+			}
+		}
+	}
+	FreeSiftTempMemory(memoryTmp);
+	FreeSiftData(siftData);
+	fclose(keysFile);
 }
